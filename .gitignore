@@ -20,3 +20,10 @@ build
 # other
 eclipse
 run
+
+gradlew
+gradlew.bat
+build.gradle
+gradle\*
+*.txt
+*.launch
