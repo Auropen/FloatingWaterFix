@@ -22,6 +22,7 @@ public class FloatingWaterFix
     
     @EventHandler
     public void init(FMLInitializationEvent event) {
+		WorldGeneration.compileBiomesConfig();
     	GameRegistry.registerWorldGenerator(new WorldGeneration(), 10);
     }
 }
