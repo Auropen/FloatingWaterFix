@@ -24,6 +24,6 @@ run
 gradlew
 gradlew.bat
 build.gradle
-gradle\*
+gradle/*
 *.txt
 *.launch
