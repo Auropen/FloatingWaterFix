@@ -13,7 +13,7 @@ public class FloatingWaterFix
 {
     public static final String MODID = "floatingwaterfix";
     public static final String NAME = "Floating Water Fix";
-    public static final String VERSION = "1.0";
+    public static final String VERSION = "1.2";
     
     @EventHandler
 	public void preInit(FMLPreInitializationEvent event) {	
@@ -23,6 +23,6 @@ public class FloatingWaterFix
     @EventHandler
     public void init(FMLInitializationEvent event) {
 		WorldGeneration.compileBiomesConfig();
-    	GameRegistry.registerWorldGenerator(new WorldGeneration(), 10);
+    	GameRegistry.registerWorldGenerator(new WorldGeneration(), 0);
     }
 }

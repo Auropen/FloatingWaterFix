@@ -30,20 +30,70 @@ public class WorldGeneration implements IWorldGenerator {
 
 	//List of chunks that is marked for fixing
 	private List<Chunk> checkChunk = new ArrayList<Chunk>(); 
-	
+
 	//Top layer blocks for specific biomes
 	private static Map<String, IBlockState> topLayerBlock = new HashMap<String, IBlockState>();
 
 	@Override
 	public void generate(Random random, int chunkX, int chunkZ, World world, IChunkProvider chunkGenerator, IChunkProvider chunkProvider) {
-		floatingWaterFix(random, chunkX, chunkZ, world, chunkProvider, Config.depthCheck);
+		switch (Config.fixMethod) {
+		case "SMART":
+			floatingWaterFixSmart(random, chunkX, chunkZ, world, chunkProvider, Config.depthCheck);
+			break;
+		case "FORCE":
+			floatingWaterFixForce(random, chunkX, chunkZ, world, chunkProvider, Config.depthCheck, false);
+			break;
+		case "FORCESECURE":
+			floatingWaterFixForce(random, chunkX, chunkZ, world, chunkProvider, Config.depthCheck, true);
+			break;
+		}
+	}
+
+
+	/**
+	 * Fix for when water floats in the air, when caverns generate through rivers and such,
+	 * creates sand under the water, suspended by dirt
+	 */
+	private void floatingWaterFixSmart(Random rand, int chunkX, int chunkZ, World world, IChunkProvider chunkProvider, int minWaterDepth) {
+		List<BlockPos> posFix = new ArrayList<BlockPos>();
+
+		//Searches for floating water in the chunk
+		for (int x = 0; x < 16; x++) {
+				for (int z = 0; z < 16; z++) {
+					BlockPos pos = new BlockPos(chunkX*16+x,62,chunkZ*16+z);
+					if (world.getBlockState(pos) == Blocks.water.getStateFromMeta(0)) {
+						for (int y = 62; y >= minWaterDepth; y--) {
+							pos = new BlockPos(pos.getX(),y,pos.getZ());
+							if (world.getBlockState(pos) == Blocks.water.getStateFromMeta(0)) {
+								for (BlockPos dir : POSITIONS) {
+									if (world.getBlockState(pos.add(dir)).getBlock() == Blocks.air ||
+											(world.getBlockState(pos.add(dir)).getBlock().getUnlocalizedName().equals("tile.water") &&
+											world.getBlockState(pos.add(dir)) != Blocks.water.getStateFromMeta(0)))
+										posFix.add(pos.add(dir));
+								}
+							}
+							else if (world.getBlockState(pos).getBlock() == Blocks.sand || world.getBlockState(pos).getBlock() == Blocks.gravel)
+								if (world.getBlockState(pos.down()).getBlock() == Blocks.air)
+									posFix.add(pos);
+								else break;
+						}
+					}
+				}
+		}
+
+		if (posFix.size() > 0 && Config.debugMessages)
+			System.out.println("Number of fixes at ("+ (chunkX*16+8) + "," + (chunkZ*16+8) + "): " + posFix.size());
+
+		//Fixes the chunk for floating water
+		for (BlockPos pos : posFix)
+			createDirtSand(world, rand, pos);
 	}
 
 	/**
 	 * Fix for when water floats in the air, when caverns generate through rivers and such,
 	 * creates sand under the water, suspended by dirt
 	 */
-	private void floatingWaterFix(Random rand, int chunkX, int chunkZ, World world, IChunkProvider chunkProvider, int minWaterDepth) {
+	private void floatingWaterFixForce(Random rand, int chunkX, int chunkZ, World world, IChunkProvider chunkProvider, int minWaterDepth, boolean secure) {
 		List<BlockPos> posFix = new ArrayList<BlockPos>();
 		boolean nearLand = false;
 
@@ -54,21 +104,29 @@ public class WorldGeneration implements IWorldGenerator {
 					BlockPos pos = new BlockPos(chunkX*16+x,y,chunkZ*16+z);
 					if (world.getBlockState(pos) == Blocks.water.getStateFromMeta(0)) {
 						for (BlockPos dir : POSITIONS) {
-							if (world.getBlockState(pos.add(dir)).getBlock() == Blocks.air) {
+							if ((world.getBlockState(pos.add(dir)).getBlock() == Blocks.air) ||
+									(!secure && world.getBlockState(pos.add(dir)).getBlock().getUnlocalizedName().equals("tile.water") &&
+									world.getBlockState(pos.add(dir)) != Blocks.water.getStateFromMeta(0))) {
 								posFix.add(pos.add(dir));
-								
+
 								//In case the fix needs to extend to neighbour chunks
 								switch (x) {
 								case 0: 
-									checkChunk.add(chunkProvider.provideChunk(chunkX - 1, chunkZ));
+									if (!checkChunk.contains(chunkProvider.provideChunk(chunkX - 1, chunkZ)))
+										checkChunk.add(chunkProvider.provideChunk(chunkX - 1, chunkZ));
+									break;
 								case 15: 
-									checkChunk.add(chunkProvider.provideChunk(chunkX + 1, chunkZ));
+									if (!checkChunk.contains(chunkProvider.provideChunk(chunkX + 1, chunkZ)))
+										checkChunk.add(chunkProvider.provideChunk(chunkX + 1, chunkZ));
 								}
 								switch (z) {
 								case 0: 
-									checkChunk.add(chunkProvider.provideChunk(chunkX, chunkZ - 1));
+									if (!checkChunk.contains(chunkProvider.provideChunk(chunkX, chunkZ - 1)))
+										checkChunk.add(chunkProvider.provideChunk(chunkX, chunkZ - 1));
+									break;
 								case 15: 
-									checkChunk.add(chunkProvider.provideChunk(chunkX, chunkZ + 1));
+									if (!checkChunk.contains(chunkProvider.provideChunk(chunkX, chunkZ + 1)))
+										checkChunk.add(chunkProvider.provideChunk(chunkX, chunkZ + 1));
 								}
 							}
 							else if (!nearLand &&
@@ -88,6 +146,9 @@ public class WorldGeneration implements IWorldGenerator {
 			else //Cleans up used chunk
 				checkChunk.remove(chunkProvider.provideChunk(chunkX, chunkZ));
 
+		if (posFix.size() > 0)
+			System.out.println("Number of fixes at ("+ (chunkX*16+8) + "," + (chunkZ*16+8) + "): " + posFix.size());
+
 		//Fixes the chunk for floating water
 		for (BlockPos pos : posFix)
 			createDirtSand(world, rand, pos);
@@ -98,29 +159,29 @@ public class WorldGeneration implements IWorldGenerator {
 		int height = Config.maxHeight;
 		IBlockState topLayer = Blocks.sand.getDefaultState();
 		IBlockState surfaceBlock = null;
-		
+
 		if (topLayerBlock.containsKey(world.getBiomeGenForCoords(pos).biomeName))
 			topLayer = topLayerBlock.get(world.getBiomeGenForCoords(pos).biomeName);
-		
+
 		if (topLayerBlock.containsKey(world.getBiomeGenForCoords(pos).biomeName + "*"))
 			surfaceBlock = topLayerBlock.get(world.getBiomeGenForCoords(pos).biomeName + "*");
-		
-		
+
+
 		if (height < 4)
 			sandHeight = height - 1;
 		else if (height > 4 && !Config.smooth)
 			height = rand.nextInt(height - sandHeight) + 1;
-		
+
 		for (int i = 1; i <= height; i++){
 			if (i <= height - sandHeight)
-				world.setBlockState(pos.down(height - i), Blocks.dirt.getDefaultState());
+				world.setBlockState(pos.down(height - i), Blocks.stone.getDefaultState());
 			else if (surfaceBlock != null && pos.down(height - i).getY() == 62)
 				world.setBlockState(pos.down(height - i), surfaceBlock);
 			else
 				world.setBlockState(pos.down(height - i), topLayer);
 		}
 	}
-	
+
 	public static void compileBiomesConfig() {
 		for (String s : Config.biomes) {
 			String[] data = s.split(";");
@@ -132,7 +193,7 @@ public class WorldGeneration implements IWorldGenerator {
 					Block b = GameData.getBlockRegistry().getObject(blockData[0] + ":" + blockData[1]);
 					System.out.println((b == null) 
 							? "No Blocks found for " + data[i] + "!" 
-							: "Registered toplayer block " + data[i] + " for biome " + biomeName);
+									: "Registered toplayer block " + data[i] + " for biome " + biomeName);
 					if (b != null)
 						topLayerBlock.put(biomeName, (blockData.length == 3) ? b.getStateFromMeta(MiscUtil.stringToInt(blockData[2])) : b.getDefaultState());
 				}
