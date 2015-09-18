@@ -1,17 +1,33 @@
 package floatingwaterfix.util;
 
 public class MiscUtil {
-	public static int stringToInt(String s) {
-		int i = 0;
-		
+	public static Integer stringToInt(String s) {
 		try {
-			i = Integer.parseInt(s);
+			return Integer.parseInt(s);
 		}
-		catch(NumberFormatException e) {
-			System.err.println("Tried to parse string to int.");
-			e.printStackTrace();
+		catch (NumberFormatException e) {
+			
 		}
-		
-		return i;
+		return null;
+	}
+	
+	public static Float stringToFloat(String s) {
+		try {
+			return Float.parseFloat(s);
+		}
+		catch (NumberFormatException e) {
+			
+		}
+		return null;
+	}
+	
+	public static Double stringToDouble(String s) {
+		try {
+			return Double.parseDouble(s);
+		}
+		catch (NumberFormatException e) {
+			
+		}
+		return null;
 	}
 }
