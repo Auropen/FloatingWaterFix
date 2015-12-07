@@ -11,20 +11,22 @@ public class Config
 	public static boolean smooth;
 	public static boolean fillOceanBubbles;
 	public static boolean debugMessages;
-	
+	public static boolean checkLoadedChunks;
+
 	//Integer
 	public static int maxHeight;
 	public static int depthCheck;
-	
+
 	//String
 	public static String[] biomes;
 	public static String fixMethod;
-	
+
 	public static void configInit(FMLPreInitializationEvent event) {
 		Configuration config = new Configuration(new File("config/FloatingWaterFix.cfg"));
 		config.load();
 		smooth = config.get("Generation", "SmoothWaterBottom", true, "Set to true if the bottom of the water should be generated at a fixed height.").getBoolean();
 		debugMessages = config.get("Generation", "Debug", false, "Set to true to write out in console the location of a fix and the number of blocks that was fixed").getBoolean();
+		checkLoadedChunks = config.get("Generation", "CheckLoadedChunks", false, "Set to true to check for fixes in the discovered world.\nCAUTION: Will also replace player placed blocks, if inside the fix blocks of the floating water.").getBoolean();
 		fillOceanBubbles = config.get("Generation", "FillOceanBubbles", true, "Set to true if the mod should fill ocean bubbles.").getBoolean();
 		maxHeight = config.get("Generation", "WaterBottomHeight", 5, "The number of layers of stone/sand under the bottom of the water.").getInt();
 		depthCheck = config.get("Generation", "DeepestWaterCheck", 45, "The depth of the \"y\" check, and checks up to y-level 62. Keep it under 62, \nthe lower number is the more performance it uses on chunk generation").getInt();

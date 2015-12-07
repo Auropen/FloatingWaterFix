@@ -11,6 +11,7 @@ import floatingwaterfix.FloatingWaterFix;
 import floatingwaterfix.config.Config;
 import floatingwaterfix.util.MiscUtil;
 import net.minecraft.block.Block;
+import net.minecraft.block.BlockFalling;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.init.Blocks;
 import net.minecraft.util.BlockPos;
@@ -33,6 +34,8 @@ public class WorldGeneration implements IWorldGenerator {
 	//Top layer blocks for specific biomes
 	private static Map<String, IBlockState> topLayerBlock = new HashMap<String, IBlockState>();
 
+
+
 	@Override
 	public void generate(Random random, int chunkX, int chunkZ, World world, IChunkProvider chunkGenerator, IChunkProvider chunkProvider) {
 		switch (Config.fixMethod) {
@@ -48,14 +51,15 @@ public class WorldGeneration implements IWorldGenerator {
 		}
 	}
 
-
 	/**
 	 * Fix for when water floats in the air, when caverns generate through rivers and such,
 	 * creates sand under the water, suspended by dirt
+	 * *SMART* Only checks if the block at level 64 is water, saving performance.
 	 */
-	private void floatingWaterFixSmart(Random rand, int chunkX, int chunkZ, World world, IChunkProvider chunkProvider, int minWaterDepth) {
+	public void floatingWaterFixSmart(Random rand, int chunkX, int chunkZ, World world, IChunkProvider chunkProvider, int minWaterDepth) {
 		List<BlockPos> posFix = new ArrayList<BlockPos>();
 		boolean nearLand = false;
+		long sTime = System.currentTimeMillis();
 
 		//Searches for floating water in the chunk
 		for (int x = 0; x < 16; x++) {
@@ -63,7 +67,6 @@ public class WorldGeneration implements IWorldGenerator {
 				BlockPos pos = new BlockPos(chunkX*16+x,62,chunkZ*16+z);
 				if (world.getBlockState(pos) == Blocks.water.getStateFromMeta(0)) {
 					for (int y = 62; y >= minWaterDepth; y--) {
-						pos = new BlockPos(pos.getX(),y,pos.getZ());
 						if (world.getBlockState(pos) == Blocks.water.getStateFromMeta(0)) {
 							for (BlockPos dir : POSITIONS) {
 								if (world.getBlockState(pos.add(dir)).getBlock() == Blocks.air ||
@@ -75,7 +78,7 @@ public class WorldGeneration implements IWorldGenerator {
 									nearLand = true;
 							}
 						}
-						else if (world.getBlockState(pos).getBlock() == Blocks.sand || world.getBlockState(pos).getBlock() == Blocks.gravel)
+						else if (world.getBlockState(pos).getBlock() instanceof BlockFalling)
 							if (world.getBlockState(pos.down()).getBlock() == Blocks.air)
 								posFix.add(pos);
 							else break;
@@ -89,27 +92,29 @@ public class WorldGeneration implements IWorldGenerator {
 			//Checks if the fix was in the ocean, then it fills the ocean bubbles.
 			for (BlockPos pos : posFix)
 				if (Config.fillOceanBubbles &&	(world.getBiomeGenForCoords(pos) == BiomeGenBase.ocean ||
-												 world.getBiomeGenForCoords(pos) == BiomeGenBase.deepOcean))
+				world.getBiomeGenForCoords(pos) == BiomeGenBase.deepOcean))
 					fillOceanBubbles(world, rand, pos);
 			return;
 		}
-		
+
+		long eTime = System.currentTimeMillis();
 		if (posFix.size() > 0 && Config.debugMessages)
-			FMLLog.info("Number of fixes at (%d,%d): %d", (chunkX*16+8), (chunkZ*16+8), posFix.size());
-			//System.out.println("Number of fixes at ("+ (chunkX*16+8) + "," + (chunkZ*16+8) + "): " + posFix.size());
+			FMLLog.info("Number of fixes at (%d,%d): %d, took %d ms", (chunkX*16+8), (chunkZ*16+8), posFix.size(), eTime-sTime);
 
 		//Fixes the chunk for floating water
 		for (BlockPos pos : posFix)
-			createDirtSand(world, rand, pos);
+			createSeaFloorWall(world, rand, pos);
 	}
 
 	/**
 	 * Fix for when water floats in the air, when caverns generate through rivers and such,
 	 * creates sand under the water, suspended by dirt
+	 * *FORCE* Checks all blocks in the desired height, will fill water in different levels.
 	 */
-	private void floatingWaterFixForce(Random rand, int chunkX, int chunkZ, World world, IChunkProvider chunkProvider, int minWaterDepth, boolean secure) {
+	public void floatingWaterFixForce(Random rand, int chunkX, int chunkZ, World world, IChunkProvider chunkProvider, int minWaterDepth, boolean secure) {
 		List<BlockPos> posFix = new ArrayList<BlockPos>();
 		boolean nearLand = false;
+		long sTime = System.currentTimeMillis();
 
 		//Searches for floating water in the chunk
 		for (int y = minWaterDepth; y < 63; y++) {
@@ -137,21 +142,25 @@ public class WorldGeneration implements IWorldGenerator {
 			//Checks if the fix was in the ocean, then it fills the ocean bubbles.
 			for (BlockPos pos : posFix)
 				if (Config.fillOceanBubbles &&	(world.getBiomeGenForCoords(pos) == BiomeGenBase.ocean ||
-											     world.getBiomeGenForCoords(pos) == BiomeGenBase.deepOcean))
+				world.getBiomeGenForCoords(pos) == BiomeGenBase.deepOcean))
 					fillOceanBubbles(world, rand, pos);
 			return;
 		}
 
+		long eTime = System.currentTimeMillis();
 		if (posFix.size() > 0 && Config.debugMessages)
-			FMLLog.info("Number of fixes at (%d,%d): %d", (chunkX*16+8), (chunkZ*16+8), posFix.size());
-			//System.out.println("Number of fixes in chunk at ("+ (chunkX*16+8) + "," + (chunkZ*16+8) + "): " + posFix.size());
+			FMLLog.info("Number of fixes at (%d,%d): %d, took %d ms", (chunkX*16+8), (chunkZ*16+8), posFix.size(), eTime-sTime);
 
 		//Fixes the chunk for floating water
 		for (BlockPos pos : posFix)
-			createDirtSand(world, rand, pos);
+			createSeaFloorWall(world, rand, pos);
 	}
 
-	private void createDirtSand(World world, Random rand, BlockPos pos) {
+	/**
+	 * Creates seafloor or walling, at the desired block position, blocks used
+	 * is defined in the config. Creating bottom first and up.
+	 */
+	private void createSeaFloorWall(World world, Random rand, BlockPos pos) {
 		int sandHeight = 3;
 		int height = Config.maxHeight;
 		IBlockState topLayer = Blocks.sand.getDefaultState();
@@ -179,6 +188,9 @@ public class WorldGeneration implements IWorldGenerator {
 		}
 	}
 
+	/**
+	 * Fills the ocean bubble at the given block position.
+	 */
 	private void fillOceanBubbles(World world, Random rand, BlockPos pos) {
 		IBlockState waterState = Blocks.water.getStateFromMeta(0);
 		BlockPos currentPos = pos;
@@ -188,6 +200,9 @@ public class WorldGeneration implements IWorldGenerator {
 		}
 	}
 
+	/**
+	 * Reads the configured top blocks/surface blocks and stores into usable data.
+	 */
 	public static void compileBiomesConfig() {
 		FMLLog.info("Initializing biomes block registering for %s", FloatingWaterFix.NAME);
 		for (String s : Config.biomes) {
